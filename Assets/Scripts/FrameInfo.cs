@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System.Collections.Generic;
+using UnityEngine;
 using UnityEngine.UI;
 
 namespace Assets.Scripts
@@ -21,6 +22,13 @@ namespace Assets.Scripts
 
         private Color _startColor;
         private bool _isStarter;
+
+        public List<Vertex> Vertices { get; private set; }
+
+        public FrameInfo()
+        {
+            Vertices = new List<Vertex>(10);
+        }
 
         void Start()
         {
