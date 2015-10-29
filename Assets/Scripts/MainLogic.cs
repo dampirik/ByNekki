@@ -19,9 +19,9 @@ namespace Assets.Scripts
 
         public GameObject RibPrefab;
 
-        private GameObject _stopGameObject;
+        private GameObject _stopStateMenu;
 
-        private GameObject _playGameObject;
+        private GameObject _playStateMenu;
 
         private GameObject _framesContent;
 
@@ -31,59 +31,80 @@ namespace Assets.Scripts
 
         private readonly List<FrameInfo> _frames;
 
+        private readonly List<Vertex> _vertices;
+
         private int _selectedIndex;
+
+        private Vertex _activeVertex;
+
+        private int _startSelectFrameAnimation;
+
+        private float _timeAnimation;
+        private float _nextStepTimeAnimation;
 
         public MainLogic()
         {
             _currentState = GUIState.None;
-            _frames = new List<FrameInfo>(); 
+            _frames = new List<FrameInfo>();
+            _vertices = new List<Vertex>(10);
         }
 
         // Use this for initialization
         void Start()
         {
-            _stopGameObject = gameObject.Find("StopState", true);
-            _playGameObject = gameObject.Find("PlayState", true);
+            _stopStateMenu = gameObject.Find("StopStateMenu", true);
+            _playStateMenu = gameObject.Find("PlayStateMenu", true);
+
             _currentFrame = GameObject.Find("CurrentFrame");
 
             _framesContent = GameObject.Find("FramesContent");
 
             _frames.Clear();
 
+            _selectedIndex = -1;
+
             AddFrame();
 
-            SetState(GUIState.Play);
+            SetState(GUIState.Stop);
+        }
+        
+        private void UpdateStatePlay()
+        {
+            _timeAnimation += Time.deltaTime;
+
+            if (_timeAnimation > _nextStepTimeAnimation)
+            {
+                var nextIndex = _selectedIndex + 1;
+
+                if (_selectedIndex >= _frames.Count - 1)
+                {
+                    nextIndex = 0;
+                    _nextStepTimeAnimation = 0;
+                    _timeAnimation = 0;
+                }
+
+                ChangeActiveFrame(nextIndex); //временно
+                //TODO потом переделать на анимацю
+                var frame = _frames[_selectedIndex];
+                //frame.IsActive = true;
+                _nextStepTimeAnimation += frame.FrameTime;
+            }
         }
 
-        private Vertex _activeVertex;
-
-        void Update()
+        private void UpdateStateStop()
         {
-            if (_frames.Count == 0)
-                return;
-
-            if(Input.GetKeyDown(KeyCode.A))
+            if (Input.GetKeyDown(KeyCode.A))
             {
                 if (_selectedIndex - 1 >= 0)
                 {
-                    _frames[_selectedIndex].IsActive = false;
-                    
-                    ClearCurrentFrame();
-
-                    _selectedIndex--;
-                    SetActiveFrame();
+                    ChangeActiveFrame(_selectedIndex - 1);
                 }
             }
-            else if(Input.GetKeyDown(KeyCode.D))
+            else if (Input.GetKeyDown(KeyCode.D))
             {
                 if (_selectedIndex + 1 < _frames.Count)
                 {
-                    _frames[_selectedIndex].IsActive = false;
-
-                    ClearCurrentFrame();
-
-                    _selectedIndex++;
-                    SetActiveFrame();
+                    ChangeActiveFrame(_selectedIndex + 1);
                 }
             }
             else if (Input.GetKeyDown(KeyCode.Backspace))
@@ -93,15 +114,12 @@ namespace Assets.Scripts
 
                 var frame = _frames[_selectedIndex];
 
-                ClearCurrentFrame();
-
                 _frames.RemoveAt(_selectedIndex);
                 Destroy(frame.gameObject);
 
                 if (_frames.Count > 0)
                 {
-                    _selectedIndex = _selectedIndex - 1 >= 0 ? _selectedIndex - 1 : 0;
-                    SetActiveFrame();
+                    ChangeActiveFrame(_selectedIndex - 1 >= 0 ? _selectedIndex - 1 : 0);
                 }
             }
 
@@ -110,34 +128,32 @@ namespace Assets.Scripts
 
             if (Input.GetMouseButtonDown(1))
             {
-                var frame = _frames[_selectedIndex];
-
                 var mouse = Camera.main.ScreenToWorldPoint(Input.mousePosition);
 
-                var vertex = frame.Vertices.FirstOrDefault(item => item.Collision(mouse));
+                var vertex = _vertices.FirstOrDefault(item => item.Collision(mouse));
 
                 if (vertex == null)
                 {
                     var item = (GameObject)Instantiate(VertexPrefab, Vector3.zero, Quaternion.identity);
                     item.transform.parent = _currentFrame.transform;
-
-                    vertex = new Vertex
-                                 {
-                                     CurrentGameObject = item,
-                                     Position = new Vector3(mouse.x, mouse.y, 0)
-                                 };
-                    frame.Vertices.Add(vertex);
+                    item.transform.position = new Vector3(mouse.x, mouse.y, 0);
+                    _vertices.Add(item.GetComponent<Vertex>());
                 }
                 else
                 {
-                    Destroy(vertex.CurrentGameObject);
-                    frame.Vertices.Remove(vertex);
+                    Destroy(vertex.gameObject);
+                    _vertices.Remove(vertex);
+
+                    foreach (var frame in _frames)
+                    {
+                        frame.Changes.Remove(vertex.Id);
+                    }
                 }
             }
             else if (Input.GetMouseButton(0) && _activeVertex != null)
             {
                 var mouse = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-                _activeVertex.Position = new Vector3(mouse.x, mouse.y, 0);
+                _activeVertex.transform.position = new Vector3(mouse.x, mouse.y, 0);
             }
             else if (Input.GetMouseButtonUp(0) && _activeVertex != null)
             {
@@ -145,32 +161,52 @@ namespace Assets.Scripts
             }
             else if (Input.GetMouseButtonDown(0) && _activeVertex == null)
             {
-                var frame = _frames[_selectedIndex];
                 var mouse = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-                var vertex = frame.Vertices.FirstOrDefault(item => item.Collision(mouse));
+                var vertex = _vertices.FirstOrDefault(item => item.Collision(mouse));
                 _activeVertex = vertex;
             }
+        }
+
+        void Update()
+        {
+            if (_frames.Count == 0)
+                return;
+
+            switch (_currentState)
+            {
+                case GUIState.Play:
+                    UpdateStatePlay();
+                    break;
+                case GUIState.Stop:
+                    UpdateStateStop();
+                    break;
+            }
+
         }
 
         public void SetState(int state)
         {
             SetState((GUIState) state);
         }
-
+        
         public void SetState(GUIState state)
         {
             if (_currentState == GUIState.None)
             {
-                _stopGameObject.SetActive(false);
-                _playGameObject.SetActive(false);
+                _stopStateMenu.SetActive(false);
+                _playStateMenu.SetActive(false);
+                _startSelectFrameAnimation = 0;
             }
             else if (_currentState == GUIState.Play)
             {
-                _playGameObject.SetActive(false);
+                _timeAnimation = 0;
+                _nextStepTimeAnimation = 0;
+
+                _playStateMenu.SetActive(false);
             }
             else if (_currentState == GUIState.Stop)
             {
-                _stopGameObject.SetActive(false);
+                _stopStateMenu.SetActive(false);
             }
 
             var oldState = _currentState;
@@ -178,11 +214,27 @@ namespace Assets.Scripts
 
             if (_currentState == GUIState.Play)
             {
-                _playGameObject.SetActive(true);
+                _activeVertex = null;
+
+                _startSelectFrameAnimation = _selectedIndex;
+
+                for (var i = 0; i < _selectedIndex; i++)
+                {
+                    _timeAnimation += _frames[i].FrameTime;
+                }
+                _nextStepTimeAnimation = _timeAnimation + _frames[_selectedIndex].FrameTime;
+
+                LoadChangeByFrame(_selectedIndex);
+
+                _playStateMenu.SetActive(true);
             }
             else if (_currentState == GUIState.Stop)
             {
-                _stopGameObject.SetActive(true);
+                _selectedIndex = _startSelectFrameAnimation;
+                
+                LoadChangeByFrame(_selectedIndex + 1);
+
+                _stopStateMenu.SetActive(true);
             }
 
             var @event = ChangeState;
@@ -194,6 +246,9 @@ namespace Assets.Scripts
 
         public void AddFrame()
         {
+            if (_currentState == GUIState.Play)
+                return;
+
             var frame = (GameObject) Instantiate(FramePrefab, Vector3.zero, Quaternion.identity);
             frame.transform.SetParent(_framesContent.transform);
 
@@ -206,50 +261,115 @@ namespace Assets.Scripts
 
             if (_frames.Count == 1)
             {
-                _selectedIndex = 0;
-                SetActiveFrame();
+                frameInfo.FrameTime = 0;
+                ChangeActiveFrame(0);
             }
         }
         
-        private void ClearCurrentFrame()
+        private void ChangeActiveFrame(int nextIndex)
         {
-            var childCount = transform.childCount;
-            for (var i = 0; i < childCount; ++i)
-            {
-                var child = transform.GetChild(i);
-                Destroy(child.gameObject);
-            }
+            Debug.Log("ChangeActiveFrame " + nextIndex + " из " + _frames.Count);
 
-            var frame = _frames[_selectedIndex];
-            foreach (var vertex in frame.Vertices)
-            {
-                vertex.CurrentGameObject = null;
-            }
-        }
+            if (_selectedIndex >= 0)
+                _frames[_selectedIndex].IsActive = false;
 
-        private void CreateCurrentFrame()
-        {
-            var frame = _frames[_selectedIndex];
-            foreach (var vertex in frame.Vertices)
-            {
-                var item = (GameObject)Instantiate(VertexPrefab, Vector3.zero, Quaternion.identity);
-                item.transform.parent = _currentFrame.transform;
-                item.transform.position = vertex.Position;
-            }
-        }
+            SaveChangeByFrame();
 
-        private void SetActiveFrame()
-        {
+            _selectedIndex = nextIndex;
+
             var frame = _frames[_selectedIndex];
 
             frame.IsActive = true;
 
-            CreateCurrentFrame();
+            LoadChangeByFrame(_selectedIndex + 1);
 
             var @event = ChangeFrame;
             if (@event != null)
             {
                 @event(frame);
+            }
+        }
+
+        private void SaveChangeByFrame()
+        {
+            if (_selectedIndex < 0)
+                return;
+            
+            var frame = _frames[_selectedIndex];
+
+            frame.Changes.Clear();
+
+            if (_selectedIndex == 0)
+            {
+                foreach (var vertex in _vertices)
+                {
+                    ChangeItem item;
+                    if (!frame.Changes.TryGetValue(vertex.Id, out item))
+                    {
+                        item = new ChangeItem(vertex.Id);
+                        frame.Changes.Add(vertex.Id, item);
+                    }
+                    item.PositionOffset = vertex.transform.position;
+                }
+            }
+            else
+            {
+                foreach (var vertex in _vertices)
+                {
+                    var previousPosition = GetVertexPosition(vertex.Id, _selectedIndex);
+                    if (vertex.transform.position == previousPosition)
+                    {
+                        continue;
+                    }
+
+                    ChangeItem item;
+                    if (!frame.Changes.TryGetValue(vertex.Id, out item))
+                    {
+                        item = new ChangeItem(vertex.Id);
+                        frame.Changes.Add(vertex.Id, item);
+                    }
+                    item.PositionOffset = vertex.transform.position - previousPosition;
+                }
+            }
+        }
+
+        private Vector3 GetVertexPosition(int vertexId, int frameIndex)
+        {
+            var vertexPosition = Vector3.zero;
+            for (var i = 0; i < frameIndex; i++)
+            {
+                ChangeItem item;
+                if (_frames[i].Changes.TryGetValue(vertexId, out item))
+                {
+                    vertexPosition += item.PositionOffset;
+                }
+            }
+
+            return vertexPosition;
+        }
+
+        private void LoadChangeByFrame(int selectedIndex)
+        {
+            foreach (var vertex in _vertices)
+            {
+                vertex.transform.position = Vector3.zero;
+            }
+
+            for (var i = 0; i < selectedIndex; i++)
+            {
+                var frame = _frames[i];
+
+                foreach (var change in frame.Changes)
+                {
+                    var vertex = _vertices.FirstOrDefault(s => s.Id == change.Key);
+                    if (vertex == null)
+                    {
+                        Debug.LogError("vertex == null id ==" + change.Key + " frame == " + i);
+                        continue;
+                    }
+
+                    vertex.transform.position += change.Value.PositionOffset;
+                }
             }
         }
     }

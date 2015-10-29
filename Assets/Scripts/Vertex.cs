@@ -3,41 +3,29 @@ using UnityEngine;
 
 namespace Assets.Scripts
 {
-    public class Vertex
+    public class Vertex : MonoBehaviour
     {
         private static int _index;
 
         public float Radius = 1;
 
-        private Vector3 _position;
-        public Vector3 Position
-        {
-            get { return _position; }
-            set
-            {
-                _position = value;
-                if (CurrentGameObject != null)
-                {
-                    CurrentGameObject.transform.position = Position;
-                }
-            }
-        }
-
         public int Id { get; private set; }
 
-        private readonly double _radiusPow2;
-
-        public GameObject CurrentGameObject;
-
+        private double _radiusPow2;
+        
         public Vertex()
         {
             Id = _index++;
+        }
+        
+        void Start()
+        {
             _radiusPow2 = Math.Pow(Radius, 2);
         }
 
         public bool Collision(Vector3 point)
         {
-            var delta = Math.Pow((Position.x - point.x), 2) + Math.Pow((Position.y - point.y), 2);
+            var delta = Math.Pow((transform.position.x - point.x), 2) + Math.Pow((transform.position.y - point.y), 2);
 
             if (delta <= _radiusPow2)
                 return true;
