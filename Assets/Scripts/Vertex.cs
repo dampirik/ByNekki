@@ -5,6 +5,10 @@ namespace Assets.Scripts
 {
     public class Vertex : MonoBehaviour
     {
+        public Vector3 StartPosition;
+
+        public Vector3 EndPosition;
+
         private static int _index;
 
         public float Radius = 1;
@@ -22,7 +26,7 @@ namespace Assets.Scripts
         {
             _radiusPow2 = Math.Pow(Radius, 2);
         }
-
+        
         public bool Collision(Vector3 point)
         {
             var delta = Math.Pow((transform.position.x - point.x), 2) + Math.Pow((transform.position.y - point.y), 2);

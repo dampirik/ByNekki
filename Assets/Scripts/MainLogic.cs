@@ -72,6 +72,7 @@ namespace Assets.Scripts
         {
             _timeAnimation += Time.deltaTime;
 
+            var frame = _frames[_selectedIndex];
             if (_timeAnimation > _nextStepTimeAnimation)
             {
                 var nextIndex = _selectedIndex + 1;
@@ -81,13 +82,52 @@ namespace Assets.Scripts
                     nextIndex = 0;
                     _nextStepTimeAnimation = 0;
                     _timeAnimation = 0;
+
+                    foreach (var vertex in _vertices)
+                    {
+                        vertex.transform.position = Vector3.zero;
+                    }
                 }
 
-                ChangeActiveFrame(nextIndex); //временно
-                //TODO потом переделать на анимацю
-                var frame = _frames[_selectedIndex];
-                //frame.IsActive = true;
+                _frames[_selectedIndex].IsActive = false;
+                
+                _selectedIndex = nextIndex;
+
+                frame = _frames[_selectedIndex];
+                frame.IsActive = true;
+                
+                foreach (var change in frame.Changes)
+                {
+                    var vertex = _vertices.FirstOrDefault(s => s.Id == change.Key);
+                    if (vertex == null)
+                    {
+                        Debug.LogError("vertex == null id ==" + change.Key + " frame == " + _selectedIndex);
+                        continue;
+                    }
+
+                    vertex.StartPosition = vertex.transform.position;
+                    vertex.EndPosition = vertex.StartPosition + change.Value.PositionOffset;
+                }
+                
                 _nextStepTimeAnimation += frame.FrameTime;
+            }
+
+            foreach (var change in frame.Changes)
+            {
+                var vertex = _vertices.FirstOrDefault(s => s.Id == change.Key);
+                if (vertex == null)
+                {
+                    Debug.LogError("vertex == null id ==" + change.Key + " frame == " + _selectedIndex);
+                    continue;
+                }
+
+                var t = 1f;
+                if (frame.FrameTime > 0f)
+                {
+                    t -= (_nextStepTimeAnimation - _timeAnimation)/frame.FrameTime;
+                }
+
+                vertex.transform.position = Vector3.Lerp(vertex.StartPosition, vertex.EndPosition, t);
             }
         }
 
@@ -112,15 +152,16 @@ namespace Assets.Scripts
                 if (_selectedIndex < 0)
                     return;
 
-                var frame = _frames[_selectedIndex];
-
-                _frames.RemoveAt(_selectedIndex);
-                Destroy(frame.gameObject);
+                var oldIndex = _selectedIndex;
 
                 if (_frames.Count > 0)
                 {
                     ChangeActiveFrame(_selectedIndex - 1 >= 0 ? _selectedIndex - 1 : 0);
                 }
+
+                var frame = _frames[oldIndex];
+                _frames.RemoveAt(oldIndex);
+                Destroy(frame.gameObject);
             }
 
             if (EventSystem.current.IsPointerOverGameObject())
@@ -224,15 +265,22 @@ namespace Assets.Scripts
                 }
                 _nextStepTimeAnimation = _timeAnimation + _frames[_selectedIndex].FrameTime;
 
-                LoadChangeByFrame(_selectedIndex);
+                LoadChangeByFrame(_selectedIndex > 0 ? _selectedIndex - 1 : 0);
 
                 _playStateMenu.SetActive(true);
             }
             else if (_currentState == GUIState.Stop)
             {
                 _selectedIndex = _startSelectFrameAnimation;
-                
-                LoadChangeByFrame(_selectedIndex + 1);
+
+                foreach (var frame in _frames)
+                {
+                    frame.IsActive = false;
+                }
+
+                _frames[_selectedIndex].IsActive = true;
+
+                LoadChangeByFrame(_selectedIndex);
 
                 _stopStateMenu.SetActive(true);
             }
@@ -268,7 +316,7 @@ namespace Assets.Scripts
         
         private void ChangeActiveFrame(int nextIndex)
         {
-            Debug.Log("ChangeActiveFrame " + nextIndex + " из " + _frames.Count);
+            Debug.Log("ChangeActiveFrame " + (nextIndex + 1) + " из " + _frames.Count);
 
             if (_selectedIndex >= 0)
                 _frames[_selectedIndex].IsActive = false;
@@ -281,7 +329,7 @@ namespace Assets.Scripts
 
             frame.IsActive = true;
 
-            LoadChangeByFrame(_selectedIndex + 1);
+            LoadChangeByFrame(_selectedIndex);
 
             var @event = ChangeFrame;
             if (@event != null)
@@ -355,7 +403,7 @@ namespace Assets.Scripts
                 vertex.transform.position = Vector3.zero;
             }
 
-            for (var i = 0; i < selectedIndex; i++)
+            for (var i = 0; i <= selectedIndex; i++)
             {
                 var frame = _frames[i];
 
@@ -368,7 +416,9 @@ namespace Assets.Scripts
                         continue;
                     }
 
+                    vertex.StartPosition = vertex.transform.position;
                     vertex.transform.position += change.Value.PositionOffset;
+                    vertex.EndPosition = vertex.transform.position;
                 }
             }
         }

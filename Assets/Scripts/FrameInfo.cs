@@ -16,7 +16,10 @@ namespace Assets.Scripts
                 _isActive = value;
 
                 if (_isStarter)
-                    gameObject.GetComponent<Image>().color = _isActive ? ActiveColor : _startColor;
+                {
+                    var image = gameObject.GetComponent<Image>();
+                    image.color = _isActive ? ActiveColor : _startColor;
+                }
             }
         }
 
