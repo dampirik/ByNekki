@@ -1,9 +1,7 @@
 ﻿using System;
 using UnityEngine;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Globalization;
 using System.Xml.Serialization;
+using System.Collections.Generic;
 
 namespace Assets.Scripts
 {

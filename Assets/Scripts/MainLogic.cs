@@ -273,19 +273,21 @@ namespace Assets.Scripts
             }
             else if (Input.GetKeyDown(KeyCode.Backspace))
             {
-                if (_selectedIndex < 0)
+                if (_selectedIndex < 0 || _frames.Count <= 1)
                     return;
 
                 var oldIndex = _selectedIndex;
 
-                if (_frames.Count > 0)
-                {
-                    ChangeActiveFrame(_selectedIndex - 1 >= 0 ? _selectedIndex - 1 : 0);
-                }
+                ChangeActiveFrame(_selectedIndex - 1 >= 0 ? _selectedIndex - 1 : _selectedIndex + 1);
 
                 var frame = _frames[oldIndex];
                 _frames.RemoveAt(oldIndex);
                 Destroy(frame.gameObject);
+
+                if (_frames.Count == 1)
+                {
+                    _selectedIndex = 0;
+                }
             }
 
             if (EventSystem.current.IsPointerOverGameObject())
