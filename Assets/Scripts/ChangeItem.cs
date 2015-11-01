@@ -6,7 +6,7 @@ namespace Assets.Scripts
     {
         public int VertexId { get; private set; }
 
-        public Vector3 PositionOffset { get; set; }
+        public Vector3 CurrentPosition { get; set; }
 
         public ChangeItem(int vertexId)
         {

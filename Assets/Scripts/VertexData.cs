@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace Assets.Scripts
 {
-    public class Vertex : MonoBehaviour
+    public class VertexData : MonoBehaviour
     {
         public Vector3 StartPosition;
 
@@ -17,11 +17,16 @@ namespace Assets.Scripts
 
         private double _radiusPow2;
         
-        public Vertex()
+        public VertexData()
         {
             Id = _index++;
         }
-        
+
+        public void SetId(int id)
+        {
+            Id = id;
+        }
+
         void Start()
         {
             _radiusPow2 = Math.Pow(Radius, 2);
