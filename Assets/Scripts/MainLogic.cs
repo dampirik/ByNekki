@@ -5,6 +5,7 @@ using UnityEngine;
 using System.Xml.Serialization;
 using UnityEngine.EventSystems;
 using System.Collections.Generic;
+using UnityEngine.UI;
 
 namespace Assets.Scripts
 {
@@ -22,6 +23,8 @@ namespace Assets.Scripts
 
         public GameObject RibPrefab;
 
+        public Text Text;
+
         private GameObject _stopStateMenu;
 
         private GameObject _playStateMenu;
@@ -35,9 +38,10 @@ namespace Assets.Scripts
         private readonly List<FrameInfo> _frames;
 
         private readonly List<VertexData> _vertices;
+        private readonly List<RibData> _ribs;
 
         private int _selectedIndex;
-
+        
         private VertexData _activeVertex;
 
         private int _startSelectFrameAnimation;
@@ -50,6 +54,7 @@ namespace Assets.Scripts
             _currentState = GUIState.None;
             _frames = new List<FrameInfo>();
             _vertices = new List<VertexData>(10);
+            _ribs = new List<RibData>(10);
         }
         
         public void Export()
@@ -59,7 +64,8 @@ namespace Assets.Scripts
 
             var data = new SaveData
                        {
-                           Frames = new List<Frame>(_frames.Count)
+                           Frames = new List<Frame>(_frames.Count),
+                           Ribs = new List<Rib>(_ribs.Count)
                        };
             for (var i = 0; i < _frames.Count; i++)
             {
@@ -80,6 +86,15 @@ namespace Assets.Scripts
                 data.Frames.Add(frame);
             }
 
+            foreach (var rib in _ribs)
+            {
+                data.Ribs.Add(new Rib
+                                  {
+                                      VertexAId = rib.VertexA.Id,
+                                      VertexBId = rib.VertexB.Id,
+                                  });
+            }
+            
             var path = Application.dataPath + "/" + "default.anim";
             using (var stream = File.Open(path, FileMode.Create))
             {
@@ -114,6 +129,12 @@ namespace Assets.Scripts
                 Destroy(vertex.gameObject);
             }
             _vertices.Clear();
+            
+            foreach (var rib in _ribs)
+            {
+                Destroy(rib.gameObject);
+            }
+            _ribs.Clear();
 
             SaveData data;
 
@@ -155,7 +176,6 @@ namespace Assets.Scripts
                 }
             }
 
-
             foreach (var changeItem in _frames[0].Changes)
             {
                 var item = (GameObject)Instantiate(VertexPrefab, Vector3.zero, Quaternion.identity);
@@ -166,7 +186,19 @@ namespace Assets.Scripts
                 vertex.SetId(changeItem.Key);
                 _vertices.Add(vertex);
             }
+            
+            foreach (var rib in data.Ribs)
+            {
+                var item = (GameObject)Instantiate(RibPrefab, Vector3.zero, Quaternion.identity);
+                item.transform.parent = _currentFrame.transform;
+                item.transform.position = Vector3.zero;
 
+                var ribData = item.GetComponent<RibData>();
+                ribData.VertexA = _vertices.FirstOrDefault(s => s.Id == rib.VertexAId);
+                ribData.VertexB = _vertices.FirstOrDefault(s => s.Id == rib.VertexBId);
+                _ribs.Add(ribData);
+            }
+            
             _selectedIndex = -1;
             ChangeActiveFrame(0);
             
@@ -176,6 +208,8 @@ namespace Assets.Scripts
         // Use this for initialization
         void Start()
         {
+            Text.text = "Текущий фрейм: " + _selectedIndex;
+
             _stopStateMenu = gameObject.Find("StopStateMenu", true);
             _playStateMenu = gameObject.Find("PlayStateMenu", true);
 
@@ -186,7 +220,7 @@ namespace Assets.Scripts
             _frames.Clear();
 
             _selectedIndex = -1;
-
+            
             AddFrame();
 
             SetState(GUIState.Stop);
@@ -234,6 +268,8 @@ namespace Assets.Scripts
                 }
                 
                 _nextStepTimeAnimation += frame.FrameTime;
+
+                SetTextCurrentFrame();
             }
 
             foreach (var change in frame.Changes)
@@ -255,6 +291,11 @@ namespace Assets.Scripts
             }
         }
 
+        private void SetTextCurrentFrame()
+        {
+            Text.text = "Текущий кадр: " + _selectedIndex;
+        }
+
         private void UpdateStateStop()
         {
             if (Input.GetKeyDown(KeyCode.A))
@@ -262,6 +303,8 @@ namespace Assets.Scripts
                 if (_selectedIndex - 1 >= 0)
                 {
                     ChangeActiveFrame(_selectedIndex - 1);
+
+                    SetTextCurrentFrame();
                 }
             }
             else if (Input.GetKeyDown(KeyCode.D))
@@ -269,6 +312,8 @@ namespace Assets.Scripts
                 if (_selectedIndex + 1 < _frames.Count)
                 {
                     ChangeActiveFrame(_selectedIndex + 1);
+
+                    SetTextCurrentFrame();
                 }
             }
             else if (Input.GetKeyDown(KeyCode.Backspace))
@@ -278,16 +323,26 @@ namespace Assets.Scripts
 
                 var oldIndex = _selectedIndex;
 
-                ChangeActiveFrame(_selectedIndex - 1 >= 0 ? _selectedIndex - 1 : _selectedIndex + 1);
-
-                var frame = _frames[oldIndex];
-                _frames.RemoveAt(oldIndex);
-                Destroy(frame.gameObject);
-
-                if (_frames.Count == 1)
+                if (_selectedIndex - 1 >= 0)
                 {
+                    ChangeActiveFrame(_selectedIndex - 1);
+
+                    var frame = _frames[oldIndex];
+                    _frames.RemoveAt(oldIndex);
+                    Destroy(frame.gameObject);
+                }
+                else
+                {
+                    ChangeActiveFrame(_selectedIndex + 1);
+
+                    var frame = _frames[oldIndex];
+                    _frames.RemoveAt(oldIndex);
+                    Destroy(frame.gameObject);
+
                     _selectedIndex = 0;
                 }
+
+                SetTextCurrentFrame();
             }
 
             if (EventSystem.current.IsPointerOverGameObject())
@@ -295,6 +350,7 @@ namespace Assets.Scripts
 
             if (Input.GetMouseButtonDown(1))
             {
+                Debug.Log("Create/Delete vertex");
                 var mouse = Camera.main.ScreenToWorldPoint(Input.mousePosition);
 
                 var vertex = _vertices.FirstOrDefault(item => item.Collision(mouse));
@@ -328,22 +384,77 @@ namespace Assets.Scripts
                     {
                         frame.Changes.Remove(vertex.Id);
                     }
+
+                    var ribs = _ribs.Where(rib => rib.VertexA.Id == vertex.Id || rib.VertexB.Id == vertex.Id).ToList();
+
+                    foreach (var rib in ribs)
+                    {
+                        Destroy(rib.gameObject);
+                        _ribs.Remove(rib);
+                    }
                 }
             }
-            else if (Input.GetMouseButton(0) && _activeVertex != null)
+            else if (Input.GetMouseButtonUp(0) && _activeVertex != null && !Input.GetKey(KeyCode.LeftControl))
             {
-                var mouse = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-                _activeVertex.transform.position = new Vector3(mouse.x, mouse.y, 0);
+                Debug.Log("Clear active vertex");
+                _activeVertex = null;
             }
-            else if (Input.GetMouseButtonUp(0) && _activeVertex != null)
+            else if (Input.GetMouseButtonDown(0) && _activeVertex != null && Input.GetKey(KeyCode.LeftControl))
             {
+                Debug.Log("Create/delete rib");
+
+                var mouse = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+                var vertex = _vertices.FirstOrDefault(item => item.Collision(mouse));
+
+                if (vertex != null && vertex != _activeVertex)
+                {
+                    var rib =
+                        _ribs.FirstOrDefault(
+                            r =>
+                            (r.VertexA.Id == vertex.Id && r.VertexB.Id == _activeVertex.Id) ||
+                            (r.VertexB.Id == vertex.Id && r.VertexA.Id == _activeVertex.Id));
+
+                    if (rib == null)
+                    {
+                        var item = (GameObject)Instantiate(RibPrefab, Vector3.zero, Quaternion.identity);
+                        item.transform.parent = _currentFrame.transform;
+                        item.transform.position = new Vector3(mouse.x, mouse.y, 0);
+
+                        rib = item.GetComponent<RibData>();
+                        rib.VertexA = _activeVertex;
+                        rib.VertexB = vertex;
+
+                        _ribs.Add(rib);
+                    }
+                    else
+                    {
+                        Destroy(rib.gameObject);
+                        _ribs.Remove(rib);
+                    }
+                }
+
                 _activeVertex = null;
             }
             else if (Input.GetMouseButtonDown(0) && _activeVertex == null)
             {
+                Debug.Log("Select vertex");
+
                 var mouse = Camera.main.ScreenToWorldPoint(Input.mousePosition);
                 var vertex = _vertices.FirstOrDefault(item => item.Collision(mouse));
                 _activeVertex = vertex;
+            }
+            else if (Input.GetMouseButton(0) && _activeVertex != null && !Input.GetKey(KeyCode.LeftControl))
+            {
+                Debug.Log("Move vertex");
+
+                var mouse = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+                _activeVertex.transform.position = new Vector3(mouse.x, mouse.y, 0);
+            }
+
+            if (Input.GetKeyUp(KeyCode.LeftControl) && _activeVertex!=null)
+            {
+                Debug.Log("Clear active vertex by UpLeftControl");
+                _activeVertex = null;
             }
         }
 
@@ -437,6 +548,8 @@ namespace Assets.Scripts
 
                 _stopStateMenu.SetActive(true);
             }
+            
+            SetTextCurrentFrame();
 
             var @event = ChangeState;
             if (@event != null)

@@ -41,5 +41,21 @@ namespace Assets.Scripts
 
             return false;
         }
+
+        public override bool Equals(object o)
+        {
+            if (o == null)
+                return false;
+
+            var item = o as VertexData;
+
+            if (item == null)
+                return false;
+
+            if (Id != item.Id)
+                return false;
+
+            return true;
+        }
     }
 }
